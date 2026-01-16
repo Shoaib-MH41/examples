@@ -1,4 +1,3 @@
-
 package org.tensorflow.lite.examples.objectdetection
 
 import android.content.Context
@@ -25,12 +24,20 @@ class ObjectDetectorHelper(
 
     private var objectDetector: ObjectDetector? = null
 
+    // --- سائنسی ڈیٹا ریکارڈنگ کے لیے نئے متغیرات ---
+    private var minInferenceTime = Long.MAX_VALUE
+    private var maxInferenceTime = 0L
+    private var stableEfficiency = 0.0f
+
     init {
         setupObjectDetector()
     }
 
     fun clearObjectDetector() {
         objectDetector = null
+        // ری سیٹ کرنے پر پرانا ڈیٹا صاف کریں
+        minInferenceTime = Long.MAX_VALUE
+        maxInferenceTime = 0L
     }
 
     fun setupObjectDetector() {
@@ -41,9 +48,8 @@ class ObjectDetectorHelper(
 
         val baseOptionsBuilder = BaseOptions.builder().setNumThreads(numThreads)
 
-        // NPU بائی پاس اور ہارڈویئر سلیکشن لاجک
         when (currentDelegate) {
-            DELEGATE_CPU -> { /* ڈیفالٹ سی پی یو */ }
+            DELEGATE_CPU -> { /* Default */ }
             DELEGATE_GPU -> {
                 if (CompatibilityList().isDelegateSupportedOnThisDevice) {
                     baseOptionsBuilder.useGpu()
@@ -53,11 +59,10 @@ class ObjectDetectorHelper(
             }
             DELEGATE_NNAPI -> {
                 try {
-                    // یہ لائن NPU کو متحرک کرتی ہے، اگر یہاں 38% پر رکے تو Catch اسے سنبھال لے گا
                     baseOptionsBuilder.useNnapi()
                 } catch (e: Exception) {
-                    baseOptionsBuilder.useGpu() // اگر NPU لاک ہو تو جی پی یو استعمال کرو
-                    Log.e("NPU_FIX", "NPU Blocked on Android 14. Falling back to GPU.")
+                    baseOptionsBuilder.useGpu()
+                    Log.e("NPU_FIX", "NPU Blocked. Falling back to GPU.")
                 }
             }
         }
@@ -94,26 +99,39 @@ class ObjectDetectorHelper(
         
         inferenceTime = SystemClock.uptimeMillis() - inferenceTime
 
-        // --- خلیہ نما مشین (Self-Sustaining Cell) کا فارمولا ---
-        // فرض کریں باہر سے ملنے والی انرجی 0.90 ہے اور مشین کا اندرونی نقصان 0.05 ہے
-        val externalEnergy = 0.90f 
+        // --- صلاحیت کا تجزیہ (Capability Analysis) ---
+        
+        // سب سے بہترین رفتار (Min Time) ریکارڈ کریں
+        if (inferenceTime < minInferenceTime && inferenceTime > 0) {
+            minInferenceTime = inferenceTime
+        }
+        
+        // سب سے زیادہ بوجھ (Max Time) ریکارڈ کریں
+        if (inferenceTime > maxInferenceTime) {
+            maxInferenceTime = inferenceTime
+        }
+
+        // کوانٹم انرجی کا مستحکم حساب
+        val externalEnergy = 0.95f 
         val internalResistance = 0.05f
         
-        // یہ حساب کرتا ہے کہ کیا مشین اپنی طاقت سے زیادہ انرجی کھینچ رہی ہے
-        val efficiency = (externalEnergy / (internalResistance + 0.01f)) * (100.0f / (inferenceTime + 1))
+        // اگر وقت کم ہے تو صلاحیت زیادہ ہے
+        val currentEfficiency = (externalEnergy / (internalResistance + 0.01f)) * (100.0f / (inferenceTime + 1))
         
-        if (efficiency > 1.0) {
-            Log.d("QuantumCell", "STATUS: SELF-SUSTAINING | Efficiency: $efficiency")
-        } else {
-            Log.d("QuantumCell", "STATUS: EXTERNAL POWER NEEDED")
-        }
-        // --------------------------------------------------
+        // لاگز میں مستقل ریکارڈ (یہ نمبرز بھاگیں گے نہیں بلکہ صلاحیت دکھائیں گے)
+        Log.d("QuantumLab", """
+            [REPORT] 
+            Current: $inferenceTime ms | Best (Min): $minInferenceTime ms | Worst (Max): $maxInferenceTime ms
+            Efficiency Score: $currentEfficiency
+        """.trimIndent())
 
+        // رزلٹ بھیجتے وقت ہم سب سے بہترین اسپیڈ بھی پاس کر سکتے ہیں
         objectDetectorListener?.onResults(
             results,
-            inferenceTime,
+            inferenceTime, // موجودہ وقت
             tensorImage.height,
-            tensorImage.width)
+            tensorImage.width
+        )
     }
 
     interface DetectorListener {

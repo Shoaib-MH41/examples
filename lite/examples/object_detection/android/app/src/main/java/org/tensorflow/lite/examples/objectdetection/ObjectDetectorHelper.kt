@@ -75,10 +75,18 @@ class ObjectDetectorHelper(
                     objectDetectorListener?.onError("GPU is not supported on this device")
                 }
             }
+            
             DELEGATE_NNAPI -> {
-                baseOptionsBuilder.useNnapi()
-            }
-        }
+    try {
+        // NPU کو جگانے کی کوشش
+        baseOptionsBuilder.useNnapi()
+    } catch (e: Exception) {
+        // اگر NPU بلاک ہو، تو فوری GPU پر شفٹ ہو جاؤ
+        baseOptionsBuilder.useGpu()
+        Log.e("NPU_FIX", "NPU was blocked, switching to GPU automatically")
+    }
+}
+
 
         optionsBuilder.setBaseOptions(baseOptionsBuilder.build())
 

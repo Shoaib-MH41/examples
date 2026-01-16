@@ -18,12 +18,21 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    # ہم یہاں گریڈل کو مجبور کریں گے کہ وہ پرانا ورژن 7.5 استعمال کرے
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v2
+      with:
+        gradle-version: 7.5 
+
     - name: Grant execute permission for gradlew
       run: chmod +x lite/examples/object_detection/android/gradlew
 
     - name: Build with Gradle
-      run: cd lite/examples/object_detection/android && ./gradlew assembleDebug
-
+      # ہم یہاں براہِ راست گریڈل کمانڈ استعمال کریں گے تاکہ ورژن کا ٹکراؤ نہ ہو
+      run: |
+        cd lite/examples/object_detection/android
+        gradle assembleDebug --stacktrace
+        
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
